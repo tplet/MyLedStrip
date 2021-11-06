@@ -101,19 +101,21 @@ public:
     /**
      * Setup MySensor
      */
-    void setup()
+    void setup(bool requestChildValue = true)
     {
         // Request all child
-        request(this->childMode, V_CUSTOM);
-        request(this->childEnable, V_STATUS);
-        request(this->childSize, V_CUSTOM);
-        request(this->childLoop, V_STATUS);
-        request(this->childColor, V_CUSTOM);
-        request(this->childRainbow, V_STATUS);
-        request(this->childSpeed, V_CUSTOM);
-        request(this->childLuminosity, V_PERCENTAGE);
-        request(this->childDirection, V_CUSTOM);
-        request(this->childPosition, V_CUSTOM);
+        if (requestChildValue) {
+            request(this->childMode, V_CUSTOM);
+            request(this->childEnable, V_STATUS);
+            request(this->childSize, V_CUSTOM);
+            request(this->childLoop, V_STATUS);
+            request(this->childColor, V_CUSTOM);
+            request(this->childRainbow, V_STATUS);
+            request(this->childSpeed, V_CUSTOM);
+            request(this->childLuminosity, V_PERCENTAGE);
+            request(this->childDirection, V_CUSTOM);
+            request(this->childPosition, V_CUSTOM);
+        }
       
         // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
         // Any other board, you can remove this part (but no harm leaving it):
@@ -430,6 +432,7 @@ protected:
         float lumDelta = (float)this->getLuminosity() / (float)(this->size+1); // Use size+1 to allow to see last point (otherwise, will be luminosity 0)
         float lum = this->direction > 0 ? lumDelta : (float)this->getLuminosity();
         int16_t posStart = (int16_t)this->position - (int16_t)(this->direction > 0 ? this->size : 0);
+        uint16_t cpt = 0;
         for (
             int16_t i = posStart; 
             i < posStart + this->size;
@@ -438,9 +441,10 @@ protected:
             pos = this->convertPosition(i);
 
             if (pos >= 0) {
-                this->strip->setPixelColor(pos, this->getNextColor((uint8_t)lum));
+                this->strip->setPixelColor(pos, this->getPosColor(cpt, (uint8_t)lum));
             }
             lum += lumDelta * fakeDirection;
+            cpt++;
         }
         this->strip->show();
 
@@ -476,27 +480,36 @@ protected:
     }
 
     /**
-     * Compte next color
+     * Compte color associated to relative position
      */
-    uint32_t getNextColor(uint8_t luminosity)
+    uint32_t getPosColor(uint16_t i, uint8_t luminosity)
     {
         // Compute next color
         if (this->rainbow) {
-            // TODO
+            int pixelHue = i * 65536 / this->size;
+
+            return this->strip->gamma32(this->strip->ColorHSV(pixelHue, 255, this->convertLuminosityToBrightness(luminosity)));
         }
         // Normal mode: use defined color
         else {
-            uint32_t c = this->color;
-            uint8_t r = (uint8_t)(c >> 16), g = (uint8_t)(c >> 8), b = (uint8_t)c;
-            uint8_t br = this->convertLuminosityToBrightness(luminosity);
-
-            // Apply luminosity
-            r = (r * br) >> 8;
-            g = (g * br) >> 8;
-            b = (b * br) >> 8;
-          
-            return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+            return this->getColorWithLuminosity(this->color, luminosity);
         }
+    }
+
+    /**
+     * Apply luminosity to color
+     */
+    uint32_t getColorWithLuminosity(uint32_t color, uint8_t luminosity)
+    {
+        uint8_t r = (uint8_t)(color >> 16), g = (uint8_t)(color >> 8), b = (uint8_t)color;
+        uint8_t br = this->convertLuminosityToBrightness(luminosity);
+
+        // Apply luminosity
+        r = (r * br) >> 8;
+        g = (g * br) >> 8;
+        b = (b * br) >> 8;
+      
+        return ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
     }
 
     /**
